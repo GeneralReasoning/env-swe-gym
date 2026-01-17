@@ -1,34 +1,38 @@
 import logging
 from shlex import quote
-
+import os
 import pytest
 
-from matrix.server import JSONObject, ToolOutput
-from environments.swegym.server import BashParams, SWEGym
+from openreward.environments import JSONObject, ToolOutput
+from swegym import BashParams, SWEGym
 
 logger = logging.getLogger(__name__)
 
-tasks = SWEGym.get_tasks("all")
+tasks = SWEGym.list_tasks("all")
 EXAMPLE_SWE_GYM_TASK = tasks[0]
 
 
+OPENREWARD_API_KEY = os.getenv("OPENREWARD_API_KEY", "")
+
+@pytest.mark.skipif(not OPENREWARD_API_KEY, reason="OPENREWARD_API_KEY is not set")
 @pytest.mark.asyncio
 async def test_swe_gym_bash():
-    env = SWEGym(task_spec=EXAMPLE_SWE_GYM_TASK)
+    env = SWEGym(task_spec=EXAMPLE_SWE_GYM_TASK, secrets={"OPENREWARD_API_KEY": OPENREWARD_API_KEY})
     try:
         await env.setup()
-        
+
         output: ToolOutput = await env.bash(BashParams(command="whoami"))
-        assert isinstance(output.data["output"], str)
-        assert "root" in output.data["output"], f"Expected 'root' in output, got {output.data['output']}"
+        assert isinstance(output.metadata["output"], str)
+        assert "root" in output.metadata["output"], f"Expected 'root' in output, got {output.metadata['output']}"
     finally:
         await env.teardown()
 
 
+@pytest.mark.skipif(not OPENREWARD_API_KEY, reason="OPENREWARD_API_KEY is not set")
 @pytest.mark.asyncio
 @pytest.mark.parametrize("task", tasks)
 async def test_swe_gym_golden_patch(task: JSONObject):
-    env = SWEGym(task_spec=task)
+    env = SWEGym(task_spec=task, secrets={"OPENREWARD_API_KEY": OPENREWARD_API_KEY})
     try:
         await env.setup()
         assert env.computer is not None
@@ -45,10 +49,11 @@ async def test_swe_gym_golden_patch(task: JSONObject):
         await env.teardown()
 
 
+@pytest.mark.skipif(not OPENREWARD_API_KEY, reason="OPENREWARD_API_KEY is not set")
 @pytest.mark.asyncio
 @pytest.mark.parametrize("task", tasks)
 async def test_swe_gym_xfail_state(task: JSONObject):
-    env = SWEGym(task_spec=task)
+    env = SWEGym(task_spec=task, secrets={"OPENREWARD_API_KEY": OPENREWARD_API_KEY})
     try:
         await env.setup()
 
