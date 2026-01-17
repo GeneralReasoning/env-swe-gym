@@ -1,9 +1,10 @@
 import logging
-from shlex import quote
 import os
-import pytest
+from shlex import quote
 
+import pytest
 from openreward.environments import JSONObject, ToolOutput
+
 from swegym import BashParams, SWEGym
 
 logger = logging.getLogger(__name__)

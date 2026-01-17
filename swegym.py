@@ -1,19 +1,20 @@
+import base64
 import json
-from typing import Any, List
 import tempfile
 import traceback
 from pathlib import Path, PurePosixPath
 from shlex import quote
-import base64
+from typing import Any, List
 
 from datasets import load_dataset
+from openreward import AsyncOpenReward, SandboxSettings
+from openreward.environments import (Environment, JSONObject, TextBlock,
+                                     ToolOutput, tool)
 from pydantic import BaseModel
-
-from openreward import SandboxSettings, AsyncOpenReward
-from openreward.environments import Environment, JSONObject, TextBlock, ToolOutput, tool
 from swebench.harness.constants import SWEbenchInstance
 from swebench.harness.grading import get_eval_report
 from swebench.harness.test_spec import make_test_spec
+
 from instructions import BASH_ONLY_INSTRUCTIONS
 from utils import decode_patch_bytes
 
