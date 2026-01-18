@@ -78,10 +78,11 @@ class SWEGym(Environment):
         self.test_spec.arch = "x86_64"
         image = f"xingyaoww/{self.test_spec.instance_image_key}".replace("__", "_s_")
 
-        if not secrets.get("OPENREWARD_API_KEY", ""):
-            raise ValueError("OPENREWARD_API_KEY is not set")
+        api_key = secrets.get("OPENREWARD_API_KEY") or secrets.get("API_KEY")
+        if not api_key:
+            raise ValueError("OPENREWARD_API_KEY or API_KEY is not set")
 
-        self.or_client = AsyncOpenReward(api_key=secrets.get("OPENREWARD_API_KEY", ""))
+        self.or_client = AsyncOpenReward(api_key=api_key)
         self.compute_settings = SandboxSettings(
             environment="GeneralReasoning/SWE-Gym",
             image=image,
