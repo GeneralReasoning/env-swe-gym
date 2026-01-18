@@ -9,7 +9,7 @@ from typing import Any, List
 from datasets import load_dataset
 from openreward import AsyncOpenReward, SandboxSettings
 from openreward.environments import (Environment, JSONObject, TextBlock,
-                                     ToolOutput, tool)
+                                     ToolOutput, tool, Split)
 from pydantic import BaseModel
 from swebench.harness.constants import SWEbenchInstance
 from swebench.harness.grading import get_eval_report
@@ -206,7 +206,11 @@ class SWEGym(Environment):
 
     @classmethod
     def list_splits(cls) -> list[str]:
-        return ["all", "lite"]
+        # return ["all", "lite"]
+        return [
+            Split(name="all", type="train"),
+            Split(name="lite", type="train"),
+        ]
 
     # ---------- Text Editor tools (bash-only implementations) ----------
 
