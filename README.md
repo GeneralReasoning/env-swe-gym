@@ -1,7 +1,6 @@
 # SWE-Gym
 
-[![⭐ OpenReward Environment](https://img.shields.io/badge/%E2%AD%90%20OpenReward-Environment-f7e6cc)](https://openreward.ai/GeneralReasoning/SWE-Gym)
-[![Hugging Face Dataset](https://img.shields.io/badge/Hugging%20Face-Dataset-orange)](https://huggingface.co/datasets/SWE-Gym/SWE-Gym)
+[![⭐ OpenReward Environment](https://img.shields.io/badge/%E2%AD%90%20OpenReward-Environment-f7e6cc)](https://openreward.ai/GeneralReasoning/SWE-Gym) [![Hugging Face Dataset](https://img.shields.io/badge/Hugging%20Face-Dataset-orange)](https://huggingface.co/datasets/SWE-Gym/SWE-Gym)
 
 ## Description
 
@@ -70,7 +69,7 @@ SWE-Gym is a multi-turn environment. The agent iteratively explores the codebase
 
 ## Environment Difficulty
 
-Tasks are drawn from real-world repository bugs across popular open-source Python projects. Difficulty varies from straightforward single-file fixes to changes requiring understanding of complex codebases. As a reference point, SWE-agent-LM-32B achieves 32% on SWE-Bench Verified after training on SWE-Gym.
+[Put environment difficulty here]
 
 ## Other Environment Requirements
 
@@ -80,7 +79,7 @@ There are no external API keys required beyond OpenReward platform access. The p
 
 Agents operate in isolated Docker sandboxes provisioned per task. Each sandbox is resource-limited (1 CPU, 2GB RAM) and network-restricted. The agent cannot affect the host system or other running environments.
 
-## Citations
+## Citation
 
 ```bibtex
 @inproceedings{pan2025swegym,
