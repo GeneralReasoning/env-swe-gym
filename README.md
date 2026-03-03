@@ -20,7 +20,7 @@ Each agent is given an isolated Docker sandbox with 1 CPU and 2GB of RAM. Per-ta
 
 ## License
 
-[CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/).
+[MIT](https://opensource.org/licenses/MIT).
 
 ## Tasks
 
