@@ -84,7 +84,7 @@ class SWEGym(Environment):
 
         self.or_client = AsyncOpenReward(api_key=api_key)
         self.compute_settings = SandboxSettings(
-            environment="GeneralReasoning/SWE-Gym",
+            environment="jiayipan/SWE-Gym",
             image=image,
             machine_size="1:2"
         )
