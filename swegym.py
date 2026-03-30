@@ -156,7 +156,7 @@ class SWEGym(Environment):
                 eval_file.write_text(modified_eval_script)
                 await self.computer.upload(eval_file, str(PurePosixPath("/testbed/eval_script.sh")))
 
-                test_output = await self.computer.check_run("/bin/bash /testbed/eval_script.sh", timeout=1800)
+                test_output, _exit_code = await self.computer.run("/bin/bash /testbed/eval_script.sh", timeout=1800)
                 test_output_file = Path(temp_dir) / self.validated.instance_id / "test_output.txt"
                 test_output_file.parent.mkdir(parents=True, exist_ok=True)
                 # Handle potential encoding issues with test output
