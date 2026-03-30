@@ -186,10 +186,8 @@ class SWEGym(Environment):
                     include_tests_status=True,
                 )
             resolved = report[self.test_spec.instance_id]['resolved']
-            # Include truncated test output for debugging
-            test_output_preview = test_output[:3000] if test_output else "(empty)"
             return ToolOutput(
-                metadata={"report": report, "test_output_tail": test_output[-3000:] if test_output else "(empty)", "exit_code": _exit_code},
+                metadata={"report": report},
                 blocks=[TextBlock(text=f"Resolved: {resolved}")],
                 reward=1 if resolved else 0,
                 finished=True,
