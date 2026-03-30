@@ -156,7 +156,13 @@ class SWEGym(Environment):
                 eval_file.write_text(modified_eval_script)
                 await self.computer.upload(eval_file, str(PurePosixPath("/testbed/eval_script.sh")))
 
-                test_output, _exit_code = await self.computer.run("/bin/bash /testbed/eval_script.sh", timeout=1800)
+                # Write output to file to avoid SIGPIPE/max_bytes truncation
+                await self.computer.run(
+                    "/bin/bash /testbed/eval_script.sh > /testbed/eval_output.txt 2>&1",
+                    timeout=1800,
+                )
+                eval_output_bytes = await self.computer.download("/testbed/eval_output.txt")
+                test_output = eval_output_bytes.decode("utf-8", errors="replace")
                 # Prepend patch marker expected by SWE-Bench-Fork's grading
                 test_output = f">>>>> Applied Patch (pred)\n{test_output}"
                 test_output_file = Path(temp_dir) / self.validated.instance_id / "test_output.txt"
