@@ -157,6 +157,8 @@ class SWEGym(Environment):
                 await self.computer.upload(eval_file, str(PurePosixPath("/testbed/eval_script.sh")))
 
                 test_output, _exit_code = await self.computer.run("/bin/bash /testbed/eval_script.sh", timeout=1800)
+                # Prepend patch marker expected by SWE-Bench-Fork's grading
+                test_output = f">>>>> Applied Patch (pred)\n{test_output}"
                 test_output_file = Path(temp_dir) / self.validated.instance_id / "test_output.txt"
                 test_output_file.parent.mkdir(parents=True, exist_ok=True)
                 # Handle potential encoding issues with test output
