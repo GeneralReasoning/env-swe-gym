@@ -1,7 +1,7 @@
 import base64
 import json
 import tempfile
-import traceback
+import asyncio
 from pathlib import Path, PurePosixPath
 from shlex import quote
 from typing import Any, List
@@ -129,77 +129,95 @@ class SWEGym(Environment):
         Computes the final score. This can only be called once, after all steps have been taken; only call
         this tool after you have finished all your steps and solved the coding issue.
         """
-        try:
-            # extract patch for logging
-            await self.computer.check_run(f"git add -A && git diff --cached {self.base_commit} > /testbed/model.patch")
-            patch_bytes = await self.computer.download("/testbed/model.patch")
-            patch = decode_patch_bytes(patch_bytes)
+        report = await self._run_eval_with_retry()
+        resolved = report[self.test_spec.instance_id]['resolved']
+        return ToolOutput(
+            metadata={"report": report},
+            blocks=[TextBlock(text=f"Resolved: {resolved}")],
+            reward=1 if resolved else 0,
+            finished=True,
+        )
 
-            # ---- Modify eval script to skip install commands ()
-            eval_script_lines = self.test_spec.eval_script.split('\n')
-            modified_eval_lines = []
-            for line in eval_script_lines:
-                # Skip lines that contain install commands
-                if any(install_cmd in line for install_cmd in [
-                    "python -m pip install",
-                    "pip install",
-                    "conda install",
-                    "conda create"
-                ]):
-                    continue
-                modified_eval_lines.append(line)
-            modified_eval_script = '\n'.join(modified_eval_lines)
-            # ----
+    async def _run_eval_with_retry(self, *, max_attempts: int = 2) -> dict:
+        """Run the SWE-bench eval in the sandbox and return the parsed report.
 
-            with tempfile.TemporaryDirectory() as temp_dir:
-                eval_file = Path(temp_dir) / "eval.sh"
-                eval_file.write_text(modified_eval_script)
-                await self.computer.upload(eval_file, str(PurePosixPath("/testbed/eval_script.sh")))
+        The eval (apply patch, run tests, parse the report) is the grader's flaky
+        external op; a failure is retried then re-raised so the SDK marks the call
+        ToolFailed and ends the rollout. A legitimately failing patch is not an
+        error — it yields a report with resolved=False and is scored normally.
+        Grading is slow (~30 min), so attempts are kept low.
+        """
+        last_exc: Exception | None = None
+        for attempt in range(max_attempts):
+            try:
+                return await self._run_eval()
+            except Exception as e:
+                last_exc = e
+                if attempt < max_attempts - 1:
+                    print(f"SWE-Gym GRADING ERROR: {type(e).__name__}: {e} | retrying (attempt {attempt + 1}/{max_attempts})")
+                    await asyncio.sleep(5)
+        assert last_exc is not None
+        raise last_exc
 
-                # Write output to file to avoid SIGPIPE/max_bytes truncation
-                _eval_output, _exit_code = await self.computer.run(
-                    "/bin/bash /testbed/eval_script.sh > /testbed/eval_output.txt 2>&1",
-                    timeout=1800,
-                )
-                eval_output_bytes = await self.computer.download("/testbed/eval_output.txt")
-                test_output = eval_output_bytes.decode("utf-8", errors="replace")
-                # Prepend patch marker expected by SWE-Bench-Fork's grading
-                test_output = f">>>>> Applied Patch (pred)\n{test_output}"
-                test_output_file = Path(temp_dir) / self.validated.instance_id / "test_output.txt"
-                test_output_file.parent.mkdir(parents=True, exist_ok=True)
-                # Handle potential encoding issues with test output
-                try:
-                    test_output_file.write_text(test_output, encoding='utf-8')
-                except UnicodeEncodeError:
-                    # If UTF-8 encoding fails, use utf-8 with error handling
-                    test_output_file.write_text(test_output, encoding='utf-8', errors='replace')
+    async def _run_eval(self) -> dict:
+        """Apply the agent's patch, run the SWE-bench eval in the sandbox, and
+        return the parsed report. Raises on any sandbox/eval/parse failure."""
+        # extract patch for logging
+        await self.computer.check_run(f"git add -A && git diff --cached {self.base_commit} > /testbed/model.patch")
+        patch_bytes = await self.computer.download("/testbed/model.patch")
+        patch = decode_patch_bytes(patch_bytes)
 
-                # get the report from the test output
-                report = get_eval_report(
-                    test_spec=self.test_spec,
-                    prediction={
-                        "model_name_or_path": "None",
-                        "model_patch": patch,
-                        "instance_id": self.test_spec.instance_id,
-                    },
-                    log_path=str(PurePosixPath(test_output_file)),
-                    include_tests_status=True,
-                )
-            resolved = report[self.test_spec.instance_id]['resolved']
-            return ToolOutput(
-                metadata={"report": report},
-                blocks=[TextBlock(text=f"Resolved: {resolved}")],
-                reward=1 if resolved else 0,
-                finished=True,
+        # ---- Modify eval script to skip install commands ()
+        eval_script_lines = self.test_spec.eval_script.split('\n')
+        modified_eval_lines = []
+        for line in eval_script_lines:
+            # Skip lines that contain install commands
+            if any(install_cmd in line for install_cmd in [
+                "python -m pip install",
+                "pip install",
+                "conda install",
+                "conda create"
+            ]):
+                continue
+            modified_eval_lines.append(line)
+        modified_eval_script = '\n'.join(modified_eval_lines)
+        # ----
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            eval_file = Path(temp_dir) / "eval.sh"
+            eval_file.write_text(modified_eval_script)
+            await self.computer.upload(eval_file, str(PurePosixPath("/testbed/eval_script.sh")))
+
+            # Write output to file to avoid SIGPIPE/max_bytes truncation
+            _eval_output, _exit_code = await self.computer.run(
+                "/bin/bash /testbed/eval_script.sh > /testbed/eval_output.txt 2>&1",
+                timeout=1800,
             )
-        except Exception:
-            error_msg = traceback.format_exc()
-            return ToolOutput(
-                metadata={"error": error_msg},
-                blocks=[TextBlock(text=f"Error: {error_msg}")],
-                reward=0.0,
-                finished=True,
+            eval_output_bytes = await self.computer.download("/testbed/eval_output.txt")
+            test_output = eval_output_bytes.decode("utf-8", errors="replace")
+            # Prepend patch marker expected by SWE-Bench-Fork's grading
+            test_output = f">>>>> Applied Patch (pred)\n{test_output}"
+            test_output_file = Path(temp_dir) / self.validated.instance_id / "test_output.txt"
+            test_output_file.parent.mkdir(parents=True, exist_ok=True)
+            # Handle potential encoding issues with test output
+            try:
+                test_output_file.write_text(test_output, encoding='utf-8')
+            except UnicodeEncodeError:
+                # If UTF-8 encoding fails, use utf-8 with error handling
+                test_output_file.write_text(test_output, encoding='utf-8', errors='replace')
+
+            # get the report from the test output
+            report = get_eval_report(
+                test_spec=self.test_spec,
+                prediction={
+                    "model_name_or_path": "None",
+                    "model_patch": patch,
+                    "instance_id": self.test_spec.instance_id,
+                },
+                log_path=str(PurePosixPath(test_output_file)),
+                include_tests_status=True,
             )
+        return report
 
     @classmethod
     def list_tasks(cls, split: str) -> list[JSONObject]:
