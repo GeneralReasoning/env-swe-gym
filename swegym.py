@@ -29,6 +29,11 @@ LITE_DATASET = load_dataset("SWE-Gym/SWE-Gym-Lite", split="train")
 LITE_INSTANCE_IDS: list[str] = LITE_DATASET.to_pandas()["instance_id"].tolist()  # type: ignore
 LITE_INSTANCE_IDS = [i for i in LITE_INSTANCE_IDS if i not in MISSING_IMAGE_INSTANCE_IDS]
 
+# Reward for a submission made after the task has already been scored. Negative
+# so repeat submissions are actively discouraged, not merely left unscored.
+REPEAT_SUBMISSION_PENALTY = -0.1
+
+
 class BashParams(BaseModel, extra="forbid"):
     command: str
 
@@ -90,6 +95,14 @@ class SWEGym(Environment):
         )
         self.computer = self.or_client.sandbox(self.compute_settings)
 
+        # Scored submissions this session. answer() runs the SWE-bench eval --
+        # the hidden FAIL_TO_PASS/PASS_TO_PASS tests -- and reports whether the
+        # instance resolved. The agent also has bash and the editor tools, so an
+        # uncapped answer() is a free CI loop against the held-out tests: edit,
+        # score, read the result, edit again. The docstring already said this can
+        # only be called once; this enforces it.
+        self.submitted = 0
+
 
     async def setup(self) -> None:
         await self.computer.start()
@@ -129,8 +142,23 @@ class SWEGym(Environment):
         Computes the final score. This can only be called once, after all steps have been taken; only call
         this tool after you have finished all your steps and solved the coding issue.
         """
+        if self.submitted > 0:
+            return ToolOutput(
+                metadata={"already_submitted": True, "submission_count": self.submitted},
+                blocks=[TextBlock(text="This task has already been scored. The episode is over: "
+                                       "the evaluation is not run again, and repeat submissions "
+                                       "are penalised (reward -0.1).")],
+                reward=REPEAT_SUBMISSION_PENALTY,
+                finished=True,
+            )
+
         report = await self._run_eval_with_retry()
         resolved = report[self.test_spec.instance_id]['resolved']
+
+        # Incremented only after the eval succeeds; _run_eval_with_retry re-raises
+        # a failing eval, which leaves the attempt retryable.
+        self.submitted += 1
+
         return ToolOutput(
             metadata={"report": report},
             blocks=[TextBlock(text=f"Resolved: {resolved}")],
