@@ -159,8 +159,17 @@ class SWEGym(Environment):
         # a failing eval, which leaves the attempt retryable.
         self.submitted += 1
 
+        # tests_status names the grading tests, and metadata reaches the model
+        # like the text does, so the report carries per-group counts instead.
+        instance_report = dict(report[self.test_spec.instance_id])
+        tests_status = instance_report.pop("tests_status", {})
+        instance_report["tests_status_counts"] = {
+            group: {outcome: len(tests) for outcome, tests in outcomes.items()}
+            for group, outcomes in tests_status.items()
+        }
+
         return ToolOutput(
-            metadata={"report": report},
+            metadata={"report": {self.test_spec.instance_id: instance_report}},
             blocks=[TextBlock(text=f"Resolved: {resolved}")],
             reward=1 if resolved else 0,
             finished=True,
@@ -214,7 +223,13 @@ class SWEGym(Environment):
         with tempfile.TemporaryDirectory() as temp_dir:
             eval_file = Path(temp_dir) / "eval.sh"
             eval_file.write_text(modified_eval_script)
-            await self.computer.upload(eval_file, str(PurePosixPath("/testbed/eval_script.sh")))
+            try:
+                await self.computer.upload(eval_file, str(PurePosixPath("/testbed/eval_script.sh")))
+            except RuntimeError as e:
+                # A failed upload's message quotes the command, which embeds the
+                # eval script and so the test patch; it reaches the model if raised.
+                print(f"SWE-Gym eval script upload failed: {e}")
+                raise RuntimeError("Uploading the eval script to the sandbox failed.") from None
 
             # Write output to file to avoid SIGPIPE/max_bytes truncation
             _eval_output, _exit_code = await self.computer.run(
