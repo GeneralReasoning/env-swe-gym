@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 from shlex import quote
@@ -63,3 +64,51 @@ async def test_swe_gym_xfail_state(task: JSONObject):
         assert res.finished
     finally:
         await env.teardown()
+
+
+class _FakeComputer:
+    """Answers the eval's sandbox calls without a sandbox."""
+
+    async def check_run(self, cmd: str, **kwargs):
+        return ""
+
+    async def download(self, path: str):
+        return b"diff --git a/f.py b/f.py\n" if path.endswith(".patch") else b"eval log"
+
+    async def upload(self, local_path, container_path: str):
+        pass
+
+    async def run(self, cmd: str, **kwargs):
+        return "", 0
+
+
+# Needs no sandbox and no API key. Goes through _call_tool, the server path.
+@pytest.mark.asyncio
+@pytest.mark.parametrize("resolved", [True, False])
+async def test_swe_gym_report_hides_test_names(resolved: bool, monkeypatch):
+    env = SWEGym(task_spec=EXAMPLE_SWE_GYM_TASK, secrets={"api_key": "unused"})
+    env.computer = _FakeComputer()
+    f2p, p2p = list(env.test_spec.FAIL_TO_PASS), list(env.test_spec.PASS_TO_PASS)
+
+    def fake_eval_report(test_spec, prediction, log_path, include_tests_status):
+        return {test_spec.instance_id: {
+            "patch_is_None": False, "patch_exists": True,
+            "patch_successfully_applied": True, "resolved": resolved,
+            "tests_status": {
+                "FAIL_TO_PASS": {"success": f2p if resolved else [], "failure": [] if resolved else f2p},
+                "PASS_TO_PASS": {"success": p2p, "failure": []},
+            },
+        }}
+
+    monkeypatch.setattr("swegym.get_eval_report", fake_eval_report)
+    out = (await env._call_tool("answer", {})).root.output
+    assert out.reward == (1 if resolved else 0) and out.finished
+    payload = json.dumps({
+        "blocks": [b.model_dump() for b in out.blocks],
+        "metadata": out.metadata, "reward": out.reward, "finished": out.finished,
+    })
+    for name in f2p + p2p:
+        assert name not in payload
+    counts = out.metadata["report"][env.test_spec.instance_id]["tests_status_counts"]
+    assert counts["FAIL_TO_PASS"] == {"success": len(f2p) if resolved else 0,
+                                      "failure": 0 if resolved else len(f2p)}
