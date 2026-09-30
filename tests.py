@@ -112,3 +112,23 @@ async def test_swe_gym_report_hides_test_names(resolved: bool, monkeypatch):
     counts = out.metadata["report"][env.test_spec.instance_id]["tests_status_counts"]
     assert counts["FAIL_TO_PASS"] == {"success": len(f2p) if resolved else 0,
                                       "failure": 0 if resolved else len(f2p)}
+
+
+class _LogComputer(_FakeComputer):
+    def __init__(self, log: bytes):
+        self.log = log
+
+    async def download(self, path: str):
+        return b"diff --git a/f.py b/f.py\n" if path.endswith(".patch") else self.log
+
+
+# Needs no sandbox and no API key. Runs the fork's real get_eval_report on a
+# repo with capitals in its name, which its parser map keys in lowercase.
+@pytest.mark.asyncio
+async def test_swe_gym_grades_uppercase_repo():
+    task = next(t for t in SWEGym.list_tasks("all") if t["repo"] == "Project-MONAI/MONAI")
+    env = SWEGym(task_spec=task, secrets={"api_key": "unused"})
+    tests = list(env.test_spec.FAIL_TO_PASS) + list(env.test_spec.PASS_TO_PASS)
+    env.computer = _LogComputer("\n".join(f"PASSED {t}" for t in tests).encode())
+    out = (await env._call_tool("answer", {})).root.output
+    assert out.reward == 1 and out.finished
