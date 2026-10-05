@@ -31,7 +31,7 @@ There are two splits in this environment:
 
 Each task provides:
 - A **problem statement** describing the issue to be fixed (from the original GitHub issue or pull request).
-- A **codebase** checked out at the relevant base commit in `/testbed`.
+- A **codebase** checked out at the relevant base commit in `/testbed`. At setup its git repository is rebuilt to hold only the base commit, its history and the tags in that history, with no remotes; upstream commits made after the base commit, which contain the fix, are removed.
 - **Unit tests** (FAIL_TO_PASS and PASS_TO_PASS) that determine whether the fix is correct.
 
 ## Reward Structure
@@ -77,7 +77,7 @@ There are no external API keys required beyond OpenReward platform access. The p
 
 ## Safety
 
-Agents operate in isolated Docker sandboxes provisioned per task. Each sandbox is resource-limited (1 CPU, 2GB RAM) and network-restricted. The agent cannot affect the host system or other running environments.
+Agents operate in isolated Docker sandboxes provisioned per task. Each sandbox is resource-limited (1 CPU, 2GB RAM). Outbound network access is not blocked. The agent cannot affect the host system or other running environments.
 
 ## Citation
 
