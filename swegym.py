@@ -33,6 +33,54 @@ LITE_INSTANCE_IDS = [i for i in LITE_INSTANCE_IDS if i not in MISSING_IMAGE_INST
 # so repeat submissions are actively discouraged, not merely left unscored.
 REPEAT_SUBMISSION_PENALTY = -0.1
 
+# Rebuilds the repository in /testbed, and each submodule's, from base_commit
+# (a submodule: its checked-out commit), its history and the tags in that
+# history. The image's clone also holds upstream commits made after base_commit
+# (in tags, the reflog and the object store), and those contain the fix.
+# History up to base_commit stays, and core.abbrev keeps the short-hash length,
+# so that `git describe`, and the version that versioneer-based packages such
+# as pandas compute from it at import time, does not change. The working tree,
+# .git/info and the repository config (without remotes) are kept; the index
+# is rebuilt.
+SNAPSHOT_REPO_SCRIPT = r"""set -euo pipefail
+snapshot() {
+  cd "$1"
+  local gitdir commit fresh branch
+  gitdir=$(git rev-parse --absolute-git-dir)
+  commit=$(git rev-parse --verify "$2^{commit}")
+  fresh="$gitdir.snapshot"
+  rm -rf "$fresh"
+  git init -q --bare "$fresh"
+  git for-each-ref --merged "$commit" --format='%(objectname) %(refname)' refs/tags > "$fresh/kept-tags"
+  { echo "$commit"; cut -d' ' -f1 "$fresh/kept-tags"; } \
+    | git rev-list --objects --stdin \
+    | git pack-objects -q --stdout \
+    | git -C "$fresh" index-pack --stdin > /dev/null
+  if [ -f "$gitdir/shallow" ]; then cp "$gitdir/shallow" "$fresh/shallow"; fi
+  sed 's/^\([0-9a-f]*\) \(.*\)$/create \2 \1/' "$fresh/kept-tags" | git -C "$fresh" update-ref --stdin
+  rm "$fresh/kept-tags"
+  if branch=$(git symbolic-ref -q HEAD); then
+    git -C "$fresh" symbolic-ref HEAD "$branch"
+    git -C "$fresh" update-ref "$branch" "$commit"
+  else
+    git -C "$fresh" update-ref --no-deref HEAD "$commit"
+  fi
+  cp "$gitdir/config" "$fresh/config"
+  git config -f "$fresh/config" core.abbrev "$(git rev-parse --short "$commit" | awk '{ print length }')"
+  { git config -f "$fresh/config" --name-only --get-regexp '^(remote|branch)\.' || true; } \
+    | sed 's/\.[^.]*$//' | sort -u \
+    | while read -r section; do git config -f "$fresh/config" --remove-section "$section"; done
+  cp -R "$gitdir/info/." "$fresh/info/"
+  if [ -d "$gitdir/modules" ]; then mv "$gitdir/modules" "$fresh/modules"; fi
+  rm -rf "$gitdir"
+  mv "$fresh" "$gitdir"
+  git reset -q
+}
+snapshot /testbed "$BASE_COMMIT"
+cd /testbed
+git submodule foreach --recursive --quiet 'echo "$toplevel/$sm_path"' | while read -r path; do (snapshot "$path" HEAD); done
+"""
+
 
 class BashParams(BaseModel, extra="forbid"):
     command: str
@@ -111,6 +159,9 @@ class SWEGym(Environment):
         await self.computer.check_run("git config --system user.email 'email@email.com'")
         await self.computer.check_run("git config --system user.name 'Name'")
         await self.computer.check_run("git config --system --add safe.directory /testbed")
+        await self.computer.check_run(
+            f"BASE_COMMIT={quote(self.base_commit)}\n{SNAPSHOT_REPO_SCRIPT}", timeout=900
+        )
 
     async def teardown(self) -> None:
         await self.computer.stop()
