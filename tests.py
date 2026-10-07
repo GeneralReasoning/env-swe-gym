@@ -118,6 +118,18 @@ async def test_swe_gym_report_hides_test_names(resolved: bool, monkeypatch):
                                       "failure": 0 if resolved else len(f2p)}
 
 
+# Needs no sandbox and no API key.
+def test_sandbox_blocks_network():
+    # Every task comes from a public upstream pull request, so with network
+    # access the agent could download the fix.
+    env = SWEGym(task_spec=EXAMPLE_SWE_GYM_TASK, secrets={"api_key": "unused"})
+    assert env.compute_settings.block_network is True
+    # Proxy-aware tools fail at once instead of waiting for a connect timeout.
+    sandbox_env = env.compute_settings.env or {}
+    for var in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"):
+        assert sandbox_env.get(var, "").startswith("http://127.0.0.1:")
+
+
 class _LogComputer(_FakeComputer):
     def __init__(self, log: bytes):
         self.log = log

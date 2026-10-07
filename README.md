@@ -77,7 +77,7 @@ There are no external API keys required beyond OpenReward platform access. The p
 
 ## Safety
 
-Agents operate in isolated Docker sandboxes provisioned per task. Each sandbox is resource-limited (1 CPU, 2GB RAM). Outbound network access is not blocked. The agent cannot affect the host system or other running environments.
+Agents operate in isolated Docker sandboxes provisioned per task. Each sandbox is resource-limited (1 CPU, 2GB RAM). Outbound network access is blocked: every task comes from a public upstream pull request, so the fix would otherwise be downloadable. The images ship the repository and its dependencies, so setup and grading need no network. The agent cannot affect the host system or other running environments.
 
 ## Citation
 

@@ -82,6 +82,21 @@ git submodule foreach --recursive --quiet 'echo "$toplevel/$sm_path"' | while re
 """
 
 
+# With the network blocked, outbound connections are dropped, so curl, pip and
+# git wait minutes for a connect timeout. Proxy-aware tools are pointed at a
+# closed local port instead, so they fail at once with "connection refused".
+# Local connections bypass the proxy.
+REFUSING_PROXY = "http://127.0.0.1:9"
+NO_NETWORK_ENV = {
+    "http_proxy": REFUSING_PROXY,
+    "https_proxy": REFUSING_PROXY,
+    "HTTP_PROXY": REFUSING_PROXY,
+    "HTTPS_PROXY": REFUSING_PROXY,
+    "no_proxy": "localhost,127.0.0.1,::1",
+    "NO_PROXY": "localhost,127.0.0.1,::1",
+}
+
+
 class BashParams(BaseModel, extra="forbid"):
     command: str
 
@@ -139,7 +154,14 @@ class SWEGym(Environment):
         self.compute_settings = SandboxSettings(
             environment="jiayipan/SWE-Gym",
             image=image,
-            machine_size="1:2"
+            machine_size="1:2",
+            # Every task comes from a public upstream pull request, so with
+            # network access the agent could download the fix. Setup and
+            # grading need no network: the images ship the repository and its
+            # dependencies, the eval script's install lines are skipped, and
+            # uploads/downloads go through the SDK.
+            block_network=True,
+            env=NO_NETWORK_ENV,
         )
         self.computer = self.or_client.sandbox(self.compute_settings)
 
