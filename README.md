@@ -54,6 +54,7 @@ Excluded instances:
 - 37 whose Docker images are unavailable (`missing_images.txt`).
 - All 105 modin instances: their tests start Ray, whose object store does not fit in the sandbox, so almost no gold patch resolves.
 - 290 whose gold patch does not resolve the instance in the sandbox with the network blocked (`gold_patch_failures.txt`, grouped by cause): it needs network access, fails with or without it, does not apply, or passes only in some runs.
+- 2 whose hidden tests check behaviour the problem statement does not describe (`statement_mismatch.txt`, with the reason).
 
 Task ids (`task_all_N`) are positions in the filtered list, so changing these exclusions renumbers them.
 
