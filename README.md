@@ -4,7 +4,7 @@
 
 ## Description
 
-SWE-Gym is a training and evaluation environment for software engineering agents. It contains 2,438 real-world Python task instances sourced from 11 popular open-source repositories (including django, flask, sympy, pandas, and others). Each task provides a codebase with an executable runtime, a natural language problem statement describing an issue, and unit tests that verify whether the issue has been resolved.
+SWE-Gym is a training and evaluation environment for software engineering agents. It contains 2,006 real-world Python task instances from 10 popular open-source repositories (including pandas, mypy, moto, dask and MONAI). Each task provides a codebase with an executable runtime, a natural language problem statement describing an issue, and unit tests that verify whether the issue has been resolved.
 
 ## Capabilities
 
@@ -16,7 +16,7 @@ SWE-Gym is a training and evaluation environment for software engineering agents
 
 ## Compute Requirements
 
-Each agent is given an isolated Docker sandbox with 1 CPU and 2GB of RAM. Per-task Docker images are used, with pre-installed dependencies specific to each repository and version.
+Each agent is given an isolated Docker sandbox with 1 CPU and 2GB of RAM, except dask tasks (1 CPU, 4GB), whose test suites run out of memory at 2GB, and MONAI tasks (2 CPU, 8GB), which need the memory to load their CUDA libraries. Per-task Docker images are used, with pre-installed dependencies specific to each repository and version.
 
 ## License
 
@@ -26,8 +26,8 @@ Each agent is given an isolated Docker sandbox with 1 CPU and 2GB of RAM. Per-ta
 
 There are two splits in this environment:
 
-- **all**: 2,438 task instances spanning 11 Python repositories. This is the full SWE-Gym training set, excluding instances with missing Docker images.
-- **lite**: 230 curated task instances, a subset of the full set selected for higher quality and diversity. Also excludes instances with missing Docker images.
+- **all**: 2,006 task instances spanning 10 Python repositories. This is the SWE-Gym training set (2,438 instances), excluding the instances listed under Data.
+- **lite**: 207 curated task instances, a subset of the full set selected for higher quality and diversity, with the same exclusions.
 
 Each task provides:
 - A **problem statement** describing the issue to be fixed (from the original GitHub issue or pull request).
@@ -50,7 +50,14 @@ Task data is loaded at runtime from HuggingFace:
 - [SWE-Gym/SWE-Gym](https://huggingface.co/datasets/SWE-Gym/SWE-Gym) for the full dataset.
 - [SWE-Gym/SWE-Gym-Lite](https://huggingface.co/datasets/SWE-Gym/SWE-Gym-Lite) for the curated lite subset.
 
-Instances whose Docker images are unavailable (36 instances) are automatically excluded.
+Excluded instances:
+- 37 whose Docker images are unavailable (`missing_images.txt`).
+- All 105 modin instances: their tests start Ray, whose object store does not fit in the sandbox, so almost no gold patch resolves.
+- 290 whose gold patch does not resolve the instance in the sandbox with the network blocked (`gold_patch_failures.txt`, grouped by cause): it needs network access, fails with or without it, does not apply, or passes only in some runs.
+
+Task ids (`task_all_N`) are positions in the filtered list, so changing these exclusions renumbers them.
+
+Some pandas fixes change Cython or C sources. Those take effect only after the extensions are rebuilt (`python setup.py build_ext --inplace`, about 10 minutes on 1 CPU), and grading does not rebuild them.
 
 ## Tools
 
@@ -77,7 +84,7 @@ There are no external API keys required beyond OpenReward platform access. The p
 
 ## Safety
 
-Agents operate in isolated Docker sandboxes provisioned per task. Each sandbox is resource-limited (1 CPU, 2GB RAM). Outbound network access is not blocked. The agent cannot affect the host system or other running environments.
+Agents operate in isolated Docker sandboxes provisioned per task. Each sandbox is resource-limited (see Compute Requirements). Outbound network access is blocked: every task comes from a public upstream pull request, so the fix would otherwise be downloadable. The images ship the repository and its dependencies, so setup and grading need no network. The agent cannot affect the host system or other running environments.
 
 ## Citation
 

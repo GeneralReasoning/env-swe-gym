@@ -10,7 +10,7 @@ import pytest
 from openreward.api.sandboxes.types import RunResult
 from openreward.environments import JSONObject, ToolOutput
 
-from swegym import BashParams, SWEGym
+from swegym import MISSING_IMAGE_INSTANCE_IDS, BashParams, SWEGym
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +116,18 @@ async def test_swe_gym_report_hides_test_names(resolved: bool, monkeypatch):
     counts = out.metadata["report"][env.test_spec.instance_id]["tests_status_counts"]
     assert counts["FAIL_TO_PASS"] == {"success": len(f2p) if resolved else 0,
                                       "failure": 0 if resolved else len(f2p)}
+
+
+# Needs no sandbox and no API key.
+def test_sandbox_blocks_network():
+    # Every task comes from a public upstream pull request, so with network
+    # access the agent could download the fix.
+    env = SWEGym(task_spec=EXAMPLE_SWE_GYM_TASK, secrets={"api_key": "unused"})
+    assert env.compute_settings.block_network is True
+    # Proxy-aware tools fail at once instead of waiting for a connect timeout.
+    sandbox_env = env.compute_settings.env or {}
+    for var in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"):
+        assert sandbox_env.get(var, "").startswith("http://127.0.0.1:")
 
 
 class _LogComputer(_FakeComputer):
@@ -316,3 +328,45 @@ async def test_answer_after_setup_diffs_against_base_commit(tmp_path: Path, monk
     assert f"git checkout {shas['base']} " in (sandbox.eval_script or "")
     sandbox.git("checkout", shas["base"], "--", "calc.py")
     assert (sandbox.testbed / "calc.py").read_text() == BUGGY_CALC
+
+
+# Needs no sandbox and no API key.
+@pytest.mark.parametrize("repo, size", [
+    ("dask/dask", "1:4"),
+    ("Project-MONAI/MONAI", "2:8"),
+    ("pandas-dev/pandas", "1:2"),
+    ("getmoto/moto", "1:2"),
+])
+def test_sandbox_machine_size_per_repo(repo: str, size: str):
+    # dask's test suites run out of memory at 1:2, and MONAI needs more memory
+    # to load its CUDA libraries.
+    task = next(t for t in tasks if t["repo"] == repo)
+    env = SWEGym(task_spec=task, secrets={"api_key": "unused"})
+    assert env.compute_settings.machine_size == size
+
+
+# Needs no sandbox and no API key.
+@pytest.mark.parametrize("split", ["all", "lite"])
+def test_unsolvable_instances_are_excluded(split: str):
+    split_ids = {t["instance_id"] for t in SWEGym.list_tasks(split)}
+    assert split_ids
+    # modin's tests cannot start Ray in the sandbox.
+    assert not [i for i in split_ids if i.startswith("modin-project__")]
+    gold_failures = {
+        line.strip() for line in (Path(__file__).parent / "gold_patch_failures.txt").read_text().splitlines()
+        if line.strip() and not line.startswith("#")
+    }
+    # Needs the network, fails with or without it, does not apply, and an image that does not exist.
+    for iid in ("bokeh__bokeh-13041", "pandas-dev__pandas-50148", "python__mypy-11352", "conan-io__conan-13622"):
+        assert iid in gold_failures | set(MISSING_IMAGE_INSTANCE_IDS)
+        assert iid not in split_ids
+    assert not split_ids & gold_failures
+
+
+# Needs no sandbox and no API key.
+def test_task_list_size():
+    # Task ids are positions in this list, so a change to the excluded set renumbers them.
+    assert len(SWEGym.list_tasks("all")) == 2006
+    assert len(SWEGym.list_tasks("lite")) == 207
+    # Solvable at 1:4, so it stays.
+    assert "dask__dask-8945" in {t["instance_id"] for t in SWEGym.list_tasks("all")}
