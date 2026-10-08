@@ -29,7 +29,19 @@ with open(Path(__file__).parent / "gold_patch_failures.txt", "r") as f:
         line.strip() for line in f.readlines() if line.strip() and not line.startswith("#")
     ]
 
-EXCLUDED_INSTANCE_IDS = set(MISSING_IMAGE_INSTANCE_IDS) | set(GOLD_PATCH_FAILURE_INSTANCE_IDS)
+# Instances whose hidden tests check behaviour that the problem statement does
+# not describe, so a submission that does what the statement asks scores 0.
+# Lines starting with "#" give the reason.
+with open(Path(__file__).parent / "statement_mismatch.txt", "r") as f:
+    STATEMENT_MISMATCH_INSTANCE_IDS = [
+        line.strip() for line in f.readlines() if line.strip() and not line.startswith("#")
+    ]
+
+EXCLUDED_INSTANCE_IDS = (
+    set(MISSING_IMAGE_INSTANCE_IDS)
+    | set(GOLD_PATCH_FAILURE_INSTANCE_IDS)
+    | set(STATEMENT_MISMATCH_INSTANCE_IDS)
+)
 
 # modin's tests start Ray, whose object store does not fit in the sandbox, so
 # almost none of its gold patches resolve at any machine size.
