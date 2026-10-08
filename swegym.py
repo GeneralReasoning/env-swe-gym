@@ -21,13 +21,38 @@ from utils import decode_patch_bytes
 with open(Path(__file__).parent / "missing_images.txt", "r") as f:
     MISSING_IMAGE_INSTANCE_IDS = [line.strip() for line in f.readlines()]
 
+# Instances whose gold patch does not resolve them in the sandbox (network
+# blocked, machine sizes below), so no submission can score. Lines starting
+# with "#" group the instances by cause.
+with open(Path(__file__).parent / "gold_patch_failures.txt", "r") as f:
+    GOLD_PATCH_FAILURE_INSTANCE_IDS = [
+        line.strip() for line in f.readlines() if line.strip() and not line.startswith("#")
+    ]
+
+EXCLUDED_INSTANCE_IDS = set(MISSING_IMAGE_INSTANCE_IDS) | set(GOLD_PATCH_FAILURE_INSTANCE_IDS)
+
+# modin's tests start Ray, whose object store does not fit in the sandbox, so
+# almost none of its gold patches resolve at any machine size.
+EXCLUDED_REPOS = {"modin-project/modin"}
+
 DATASET = load_dataset("SWE-Gym/SWE-Gym", split="train")
 EXAMPLES: list[dict[str, Any]] = DATASET.to_pandas().to_dict(orient="records")  # type: ignore
-EXAMPLES = [i for i in EXAMPLES if i["instance_id"] not in MISSING_IMAGE_INSTANCE_IDS]
+EXAMPLES = [
+    i for i in EXAMPLES
+    if i["instance_id"] not in EXCLUDED_INSTANCE_IDS and i["repo"] not in EXCLUDED_REPOS
+]
 
 LITE_DATASET = load_dataset("SWE-Gym/SWE-Gym-Lite", split="train")
 LITE_INSTANCE_IDS: list[str] = LITE_DATASET.to_pandas()["instance_id"].tolist()  # type: ignore
-LITE_INSTANCE_IDS = [i for i in LITE_INSTANCE_IDS if i not in MISSING_IMAGE_INSTANCE_IDS]
+LITE_INSTANCE_IDS = [i for i in LITE_INSTANCE_IDS if i not in EXCLUDED_INSTANCE_IDS]
+
+# The test suites of these repos run out of memory in the default 1:2 sandbox
+# (dask), or need more memory to load their CUDA libraries (MONAI).
+DEFAULT_MACHINE_SIZE = "1:2"
+REPO_MACHINE_SIZES = {
+    "dask/dask": "1:4",
+    "Project-MONAI/MONAI": "2:8",
+}
 
 # Reward for a submission made after the task has already been scored. Negative
 # so repeat submissions are actively discouraged, not merely left unscored.
@@ -154,7 +179,7 @@ class SWEGym(Environment):
         self.compute_settings = SandboxSettings(
             environment="jiayipan/SWE-Gym",
             image=image,
-            machine_size="1:2",
+            machine_size=REPO_MACHINE_SIZES.get(self.validated.repo, DEFAULT_MACHINE_SIZE),
             # Every task comes from a public upstream pull request, so with
             # network access the agent could download the fix. Setup and
             # grading need no network: the images ship the repository and its
