@@ -26,7 +26,7 @@ Each agent is given an isolated Docker sandbox with 1 CPU and 2GB of RAM, except
 
 There are two splits in this environment:
 
-- **all**: 2,006 task instances spanning 10 Python repositories. This is the SWE-Gym training set (2,438 instances), excluding the instances listed under Data.
+- **all**: 2,002 task instances spanning 10 Python repositories. This is the SWE-Gym training set (2,438 instances), excluding the instances listed under Data.
 - **lite**: 207 curated task instances, a subset of the full set selected for higher quality and diversity, with the same exclusions.
 
 Each task provides:
@@ -54,7 +54,7 @@ Excluded instances:
 - 37 whose Docker images are unavailable (`missing_images.txt`).
 - All 105 modin instances: their tests start Ray, whose object store does not fit in the sandbox, so almost no gold patch resolves.
 - 290 whose gold patch does not resolve the instance in the sandbox with the network blocked (`gold_patch_failures.txt`, grouped by cause): it needs network access, fails with or without it, does not apply, or passes only in some runs.
-- 2 whose hidden tests check behaviour the problem statement does not describe (`statement_mismatch.txt`, with the reason).
+- 4 whose hidden tests check behaviour the problem statement does not describe (`statement_mismatch.txt`, with the reason).
 
 Task ids (`task_all_N`) are positions in the filtered list, so changing these exclusions renumbers them.
 

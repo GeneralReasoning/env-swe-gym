@@ -3,3 +3,7 @@
 Project-MONAI__MONAI-3385
 # The statement asks to hide --file from the help output; the test expects dvc.run(fname=..., name=...) to raise with a specific message.
 iterative__dvc-4086
+# The statement asks mypy to report duplicate Enum members; the test expects one exact error message, which the statement does not give.
+python__mypy-11267
+# The statement asks to deepcopy the extra keys in RandCropByPosNegLabeld; one FAIL_TO_PASS test expects RandWeightedCropd to add patch_index to its meta dicts.
+Project-MONAI__MONAI-2104

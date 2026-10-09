@@ -368,14 +368,14 @@ def test_unsolvable_instances_are_excluded(split: str):
 def test_statement_mismatch_instances_are_excluded(split: str):
     split_ids = {t["instance_id"] for t in SWEGym.list_tasks(split)}
     assert split_ids
-    for iid in ("Project-MONAI__MONAI-3385", "iterative__dvc-4086"):
+    for iid in ("Project-MONAI__MONAI-3385", "iterative__dvc-4086", "python__mypy-11267", "Project-MONAI__MONAI-2104"):
         assert iid not in split_ids
 
 
 # Needs no sandbox and no API key.
 def test_task_list_size():
     # Task ids are positions in this list, so a change to the excluded set renumbers them.
-    assert len(SWEGym.list_tasks("all")) == 2004
+    assert len(SWEGym.list_tasks("all")) == 2002
     assert len(SWEGym.list_tasks("lite")) == 207
     # Solvable at 1:4, so it stays.
     assert "dask__dask-8945" in {t["instance_id"] for t in SWEGym.list_tasks("all")}
